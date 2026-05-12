@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://fixedmatchestoday.co.zm/sitemap.xml
