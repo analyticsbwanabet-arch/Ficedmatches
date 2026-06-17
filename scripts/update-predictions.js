@@ -38,11 +38,23 @@ function getCATDate(offsetDays = 0) {
   return d.toISOString().split('T')[0];
 }
 
-function isToday(isoDate) {
+function isUpcoming(isoDate) {
+  const now = new Date();
+  const matchTime = new Date(isoDate);
+  const hoursAhead = (matchTime - now) / (1000 * 60 * 60);
+  // Include matches from 2 hours ago (in case live) to 48 hours ahead
+  return hoursAhead >= -2 && hoursAhead <= 48;
+}
+
+function getMatchDateLabel(isoDate) {
+  const d = new Date(isoDate);
+  d.setHours(d.getHours() + 2);
   const today = getCATDate(0);
-  const matchDate = new Date(isoDate);
-  matchDate.setHours(matchDate.getHours() + 2);
-  return matchDate.toISOString().split('T')[0] === today;
+  const tomorrow = getCATDate(1);
+  const matchDay = d.toISOString().split('T')[0];
+  if (matchDay === today) return '';
+  if (matchDay === tomorrow) return ' (Tomorrow)';
+  return ` (${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })})`;
 }
 
 function formatKickoff(isoDate) {
@@ -140,10 +152,10 @@ async function fetchOdds() {
       const data = await httpGet(url);
 
       if (Array.isArray(data)) {
-        const todayGames = data.filter(e => isToday(e.commence_time));
-        todayGames.forEach(e => e._league = league.name);
-        allEvents.push(...todayGames);
-        console.log(`  → ${todayGames.length} matches today (${data.length} total upcoming)`);
+        const upcomingGames = data.filter(e => isUpcoming(e.commence_time));
+        upcomingGames.forEach(e => e._league = league.name);
+        allEvents.push(...upcomingGames);
+        console.log(`  → ${upcomingGames.length} upcoming matches (${data.length} total)`);
       } else if (data.message) {
         console.warn(`  → API error: ${data.message}`);
       }
@@ -255,18 +267,20 @@ async function main() {
     }
   }
 
-  // 3. Generate prediction rows (max 12)
+  // 3. Sort by kick-off time and take max 12
+  events.sort((a, b) => new Date(a.commence_time) - new Date(b.commence_time));
   const matchesToShow = events.slice(0, 12);
   const predictionRows = matchesToShow.map(event => {
     const home = event.home_team;
     const away = event.away_team;
     const league = event._league;
     const kickoff = formatKickoff(event.commence_time);
+    const dateLabel = getMatchDateLabel(event.commence_time);
     const pred = generatePrediction(event);
     const confClass = pred.confidence >= 75 ? 'conf-high' : 'conf-med';
 
     return `        <tr>
-          <td><div class="match-teams">${home} vs ${away}</div><div class="match-league">${league}</div></td>
+          <td><div class="match-teams">${home} vs ${away}</div><div class="match-league">${league}${dateLabel}</div></td>
           <td class="match-time">${kickoff}</td>
           <td><span class="pred-pick pick-${pred.color}">${pred.pick}</span></td>
           <td class="pred-odds">${pred.odds}</td>
